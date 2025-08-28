@@ -1,8 +1,9 @@
 from playwright.sync_api import sync_playwright
 from bs4 import BeautifulSoup
 import re
+import time
 
-def scrape_seats_aero(origin, destination, start_date, end_date):
+def scrape_seats_aero(origin, destination, start_date, end_date, programs=None, alliances=None, transfer_partners=None, points_min=None, points_max=None, days=None):
     """
     Scrapes seats.aero for flight deals.
 
@@ -11,6 +12,12 @@ def scrape_seats_aero(origin, destination, start_date, end_date):
         destination (str): The destination airport IATA code.
         start_date (str): The start date of the travel date range in YYYY-MM-DD format.
         end_date (str): The end date of the travel date range in YYYY-MM-DD format.
+        programs (list, optional): List of frequent flyer programs to filter by. Defaults to None.
+        alliances (list, optional): List of airline alliances to filter by. Defaults to None.
+        transfer_partners (list, optional): List of transfer partners to filter by. Defaults to None.
+        points_min (int, optional): Minimum points required for a deal. Defaults to None.
+        points_max (int, optional): Maximum points required for a deal. Defaults to None.
+        days (int, optional): Number of days to search around the specified date. Defaults to None.
 
     Returns:
         list: A list of flight options, where each option is a dictionary.
@@ -30,6 +37,45 @@ def scrape_seats_aero(origin, destination, start_date, end_date):
             page.goto(url, timeout=60000)
             print("Page loaded.")
             
+            # Apply filters
+            if programs:
+                page.click('button:has-text("Programs")')
+                page.wait_for_selector('.custom-dropdown-menu')
+                for program in programs:
+                    page.check(f'label:has-text("{program}")')
+                    time.sleep(0.5) # Wait for live update
+                page.click('button:has-text("Programs")') # Close dropdown
+            
+            if alliances:
+                page.click('button:has-text("Alliances")')
+                page.wait_for_selector('.custom-dropdown-menu')
+                for alliance in alliances:
+                    page.check(f'label:has-text("{alliance}")')
+                    time.sleep(0.5)
+                page.click('button:has-text("Alliances")')
+
+            if transfer_partners:
+                page.click('button:has-text("Transfer Partners")')
+                page.wait_for_selector('.custom-dropdown-menu')
+                for partner in transfer_partners:
+                    page.check(f'label:has-text("{partner}")')
+                    time.sleep(0.5)
+                page.click('button:has-text("Transfer Partners")')
+
+            if points_min or points_max:
+                page.click('button:has-text("Points")')
+                if points_min:
+                    page.fill('input[placeholder="Min"]', str(points_min))
+                if points_max:
+                    page.fill('input[placeholder="Max"]', str(points_max))
+                page.click('button:has-text("Points")')
+
+            if days:
+                page.click('button:has-text("Days")')
+                page.select_option('select[name="additional_days_num"]', str(days))
+                page.click('button:has-text("Days")')
+
+
             # Check for the "no results" message
             if page.locator("text=our cached data does not track any flights between them").is_visible():
                 print("No cached data available for this route.")
@@ -105,12 +151,12 @@ def scrape_seats_aero(origin, destination, start_date, end_date):
 
 if __name__ == '__main__':
     # Example usage for testing
-    origin = "BRU"
-    destination = "SEA"
-    start_date = "2025-09-26"
-    end_date = "2025-09-26"
+    origin = "JFK"
+    destination = "LHR"
+    start_date = "2025-09-01"
+    end_date = "2025-09-10"
     
-    deals = scrape_seats_aero(origin, destination, start_date, end_date)
+    deals = scrape_seats_aero(origin, destination, start_date, end_date, programs=['Delta', 'Virgin'])
     
     if deals:
         for deal in deals:
