@@ -11,7 +11,7 @@ def scrape_seats_aero(origin, destination, start_date, end_date, programs=None, 
         origin (str): The origin airport IATA code.
         destination (str): The destination airport IATA code.
         start_date (str): The start date of the travel date range in YYYY-MM-DD format.
-        end_date (str): The end date of the travel date range in YYYY-MM-DD format.
+        end_date (str): The end date for the travel date range in YYYY-MM-DD format.
         programs (list, optional): List of frequent flyer programs to filter by. Defaults to None.
         alliances (list, optional): List of airline alliances to filter by. Defaults to None.
         transfer_partners (list, optional): List of transfer partners to filter by. Defaults to None.
@@ -22,7 +22,10 @@ def scrape_seats_aero(origin, destination, start_date, end_date, programs=None, 
     Returns:
         list: A list of flight options, where each option is a dictionary.
     """
-    url = f"https://seats.aero/search?min_seats=1&applicable_cabin=any&additional_days_num=1&max_fees=40000&disable_live_filtering=false&date={start_date}&origins={origin}&destinations={destination}"
+    url = f"https://seats.aero/search?min_seats=1&applicable_cabin=any&max_fees=40000&disable_live_filtering=false&date={start_date}&origins={origin}&destinations={destination}"
+    if days and days > 0:
+        url += f"&additional_days_num={days}"
+
     print(f"Scraping {url}")
     
     with sync_playwright() as p:
@@ -37,7 +40,7 @@ def scrape_seats_aero(origin, destination, start_date, end_date, programs=None, 
             page.goto(url, timeout=60000)
             print("Page loaded.")
             
-            # Apply filters
+            # Apply filters via UI interaction
             if programs:
                 page.click('button:has-text("Programs")')
                 page.wait_for_selector('.custom-dropdown-menu')
@@ -69,12 +72,6 @@ def scrape_seats_aero(origin, destination, start_date, end_date, programs=None, 
                 if points_max:
                     page.fill('input[placeholder="Max"]', str(points_max))
                 page.click('button:has-text("Points")')
-
-            if days:
-                page.click('button:has-text("Days")')
-                page.select_option('select[name="additional_days_num"]', str(days))
-                page.click('button:has-text("Days")')
-
 
             # Check for the "no results" message
             if page.locator("text=our cached data does not track any flights between them").is_visible():
@@ -156,7 +153,7 @@ if __name__ == '__main__':
     start_date = "2025-09-01"
     end_date = "2025-09-10"
     
-    deals = scrape_seats_aero(origin, destination, start_date, end_date, programs=['Delta', 'Virgin'])
+    deals = scrape_seats_aero(origin, destination, start_date, end_date, days=3)
     
     if deals:
         for deal in deals:
