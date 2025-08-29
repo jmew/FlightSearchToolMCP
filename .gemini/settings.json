@@ -1,0 +1,12 @@
+{
+  "mcpServers": {
+    "the-point-finder": {
+      "command": "/Users/jemew/Documents/flight-search-mcp/venv/bin/python",
+      "args": [
+        "the_point_finder/mcp_server.py"
+      ],
+      "timeout": 120000,
+      "trust": true
+    }
+  }
+}

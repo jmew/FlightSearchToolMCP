@@ -1,6 +1,7 @@
 from playwright.sync_api import sync_playwright, TimeoutError
 import json
 import time
+import os
 
 def scrape_pointsyeah(origin, destination, start_date, end_date):
     """
@@ -18,12 +19,17 @@ def scrape_pointsyeah(origin, destination, start_date, end_date):
     all_deals = []
     
     with sync_playwright() as p:
-        browser = p.chromium.launch(headless=False) # Headed mode is more reliable for this site
+        browser = p.chromium.launch(headless=False, args=[
+            "--disable-background-timer-throttling",
+            "--disable-backgrounding-occluded-windows",
+            "--disable-renderer-backgrounding",
+        ]) # Headed mode is more reliable for this site
         context = browser.new_context(
             user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36"
         )
         page = context.new_page()
-        page.set_viewport_size({"width": 1920, "height": 1080})
+        os.system("osascript -e 'tell application \"System Events\" to set visible of process \"Chromium\" to false'")
+        page.set_viewport_size({"width": 800, "height": 600})
 
         # --- Login ---
         try:
@@ -84,8 +90,8 @@ def scrape_pointsyeah(origin, destination, start_date, end_date):
         search_url = (
             f"https://www.pointsyeah.com/search?cabins=Economy%2CPremium+Economy%2CBusiness%2CFirst"
             f"&cabin=Economy"
-            f"&banks=Amex%2CBilt%2CCapital+One%2CChase%2CCiti%2CWF"
-            f"&airlineProgram=AR%2CAM%2CAC%2CKL%2CAS%2CAA%2CAV%2CDL%2CEK%2CEY%2CAY%2CIB%2CB6%2CLH%2CQF%2CSK%2CSQ%2CNK%2CTP%2CTK%2CUA%2CVS%2CVA"
+            f"&banks=Amex%2CCapital+One%2CChase%2CBilt"
+            f"&airlineProgram=AR%2CAM%2CAC%2CKL%2CAS%2CAV%2CDL%2CEK%2CEY%2CAY%2CIB%2CB6%2CLH%2CQF%2CSK%2CSQ%2CNK%2CTP%2CTK%2CUA%2CVS"
             f"&tripType=1"
             f"&adults=1"
             f"&children=0"
@@ -100,13 +106,13 @@ def scrape_pointsyeah(origin, destination, start_date, end_date):
 
         print("Waiting for search results to load...")
         try:
-            page.wait_for_selector('#nprogress', state='attached', timeout=20000)
+            page.wait_for_selector('#nprogress', state='attached', timeout=10000)
             print("Loading bar detected.")
-            page.wait_for_selector('#nprogress', state='detached', timeout=90000)
+            page.wait_for_selector('#nprogress', state='detached', timeout=60000) # 60 seconds
             print("Loading bar has disappeared.")
             
-            print("Waiting for network to settle...")
-            page.wait_for_load_state("networkidle", timeout=15000)
+            # print("Waiting for network to settle...")
+            # page.wait_for_load_state("networkidle", timeout=15000)
             print("Network has settled. Search complete.")
         except TimeoutError as e:
             print(f"Timed out waiting for results: {e}. Results may be incomplete.")
@@ -114,6 +120,38 @@ def scrape_pointsyeah(origin, destination, start_date, end_date):
         
         print("Finished waiting for results.")
         browser.close()
+
+    # --- Filter out deals with only excluded transfer partners ---
+    excluded_banks = {"Citi", "WF"}
+    filtered_deals = []
+    for deal in all_deals:
+        if not deal.get("routes"):
+            continue
+
+        valid_routes = []
+        for route in deal["routes"]:
+            transfer_partners = route.get("transfer", [])
+            if not transfer_partners:
+                valid_routes.append(route)  # Keep routes with no transfer info (direct earn)
+                continue
+
+            # Check if all transfer partners for this route are in the excluded list
+            is_exclusively_excluded = True
+            for partner in transfer_partners:
+                if partner.get("code") not in excluded_banks:
+                    is_exclusively_excluded = False
+                    break
+            
+            if not is_exclusively_excluded:
+                valid_routes.append(route)
+
+        if valid_routes:
+            # If there are any valid routes, we keep the deal, but only with the valid routes.
+            new_deal = deal.copy()
+            new_deal["routes"] = valid_routes
+            filtered_deals.append(new_deal)
+
+    all_deals = filtered_deals
 
     # --- Process Data ---
     best_deals = {}
@@ -140,17 +178,30 @@ def scrape_pointsyeah(origin, destination, start_date, end_date):
             points = payment.get("miles")
             if not cabin or points is None:
                 continue
+
+            segments = route.get("segments", [])
+            if not segments:
+                continue
+
+            flight_numbers = [segment.get("flight_number") for segment in segments]
+            departure_time = segments[0].get("dt")
+            arrival_time = segments[-1].get("at")
+
             if "premium" in cabin: cabin_key = "premium"
             elif "business" in cabin: cabin_key = "business"
             elif "first" in cabin: cabin_key = "first"
             else: cabin_key = "economy"
+            
             current_best = best_deals[deal_key].get(cabin_key)
             if current_best is None or points < current_best['points']:
                 best_deals[deal_key][cabin_key] = {
                     "points": points,
                     "fees": f"${payment.get('tax')} {payment.get('currency')}",
                     "seats": payment.get("seats"),
-                    "direct": len(route.get("segments", [])) == 1
+                    "direct": len(segments) == 1,
+                    "flight_numbers": flight_numbers,
+                    "departure_time": departure_time,
+                    "arrival_time": arrival_time,
                 }
     processed_deals = list(best_deals.values())
             

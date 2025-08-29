@@ -14,7 +14,7 @@ def scrape_seats_aero(origin, destination, start_date, end_date, programs=None, 
         end_date (str): The end date for the travel date range in YYYY-MM-DD format.
         programs (list, optional): List of frequent flyer programs to filter by. Defaults to None.
         alliances (list, optional): List of airline alliances to filter by. Defaults to None.
-        transfer_partners (list, optional): List of transfer partners to filter by. Defaults to None.
+        transfer_partners (list, optional): List of transfer partners to filter by. Defaults to ['American Express 🇺🇸', 'Capital One', 'Chase'].
         points_min (int, optional): Minimum points required for a deal. Defaults to None.
         points_max (int, optional): Maximum points required for a deal. Defaults to None.
         days (int, optional): Number of days to search around the specified date. Defaults to None.
@@ -22,6 +22,8 @@ def scrape_seats_aero(origin, destination, start_date, end_date, programs=None, 
     Returns:
         list: A list of flight options, where each option is a dictionary.
     """
+    if transfer_partners is None:
+        transfer_partners = ['American Express 🇺🇸', 'Capital One', 'Chase']
     url = f"https://seats.aero/search?min_seats=1&applicable_cabin=any&max_fees=40000&disable_live_filtering=false&date={start_date}&origins={origin}&destinations={destination}"
     if days and days > 0:
         url += f"&additional_days_num={days}"
@@ -63,7 +65,7 @@ def scrape_seats_aero(origin, destination, start_date, end_date, programs=None, 
                 for partner in transfer_partners:
                     page.check(f'label:has-text("{partner}")')
                     time.sleep(0.5)
-                page.click('button:has-text("Transfer Partners")')
+                page.click('button:has-text("Transfer Partners")') # Close dropdown
 
             if points_min or points_max:
                 page.click('button:has-text("Points")')
@@ -108,8 +110,18 @@ def scrape_seats_aero(origin, destination, start_date, end_date, programs=None, 
         date = cols[0].text.strip()
         last_seen = cols[1].text.strip()
         program = cols[2].text.strip()
-        departs = cols[3].text.strip()
-        arrives = cols[4].text.strip()
+        departs_str = cols[3].text.strip()
+        arrives_str = cols[4].text.strip()
+
+        # Extract airport and time
+        departs_parts = departs_str.split()
+        arrives_parts = arrives_str.split()
+        
+        departs_airport = departs_parts[0]
+        departs_time = departs_parts[1] if len(departs_parts) > 1 else None
+
+        arrives_airport = arrives_parts[0]
+        arrives_time = arrives_parts[1] if len(arrives_parts) > 1 else None
 
         def get_cabin_data(col):
             badge = col.find('span', class_='badge')
@@ -137,7 +149,10 @@ def scrape_seats_aero(origin, destination, start_date, end_date, programs=None, 
             "date": date,
             "last_seen": last_seen,
             "program": program,
-            "route": f"{departs} -> {arrives}",
+            "route": f"{departs_airport} -> {arrives_airport}",
+            "departure_time": departs_time,
+            "arrival_time": arrives_time,
+            "flight_numbers": [],
             "economy": economy,
             "premium": premium,
             "business": business,
