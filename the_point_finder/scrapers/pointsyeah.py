@@ -158,20 +158,11 @@ def scrape_pointsyeah(origin, destination, start_date, end_date):
     for deal in all_deals:
         if not deal.get("routes"):
             continue
+        
         program_name = deal.get("program")
         deal_date = deal.get("date")
         route_str = f"{deal.get('departure')} -> {deal.get('arrival')}"
-        deal_key = (program_name, deal_date, route_str)
-        if deal_key not in best_deals:
-            best_deals[deal_key] = {
-                "program": program_name,
-                "route": route_str,
-                "date": deal_date,
-                "economy": None,
-                "premium": None,
-                "business": None,
-                "first": None,
-            }
+
         for route in deal["routes"]:
             payment = route.get("payment", {})
             cabin = payment.get("cabin", "").lower()
@@ -187,6 +178,24 @@ def scrape_pointsyeah(origin, destination, start_date, end_date):
             departure_time = segments[0].get("dt")
             arrival_time = segments[-1].get("at")
 
+            # Use a more specific key to create a deal per flight
+            deal_key = (program_name, deal_date, route_str, departure_time, arrival_time)
+
+            if deal_key not in best_deals:
+                best_deals[deal_key] = {
+                    "program": program_name,
+                    "route": route_str,
+                    "date": deal_date,
+                    "departure_time": departure_time,
+                    "arrival_time": arrival_time,
+                    "flight_numbers": flight_numbers,
+                    "direct": len(segments) == 1,
+                    "economy": None,
+                    "premium": None,
+                    "business": None,
+                    "first": None,
+                }
+
             if "premium" in cabin: cabin_key = "premium"
             elif "business" in cabin: cabin_key = "business"
             elif "first" in cabin: cabin_key = "first"
@@ -198,11 +207,8 @@ def scrape_pointsyeah(origin, destination, start_date, end_date):
                     "points": points,
                     "fees": f"${payment.get('tax')} {payment.get('currency')}",
                     "seats": payment.get("seats"),
-                    "direct": len(segments) == 1,
-                    "flight_numbers": flight_numbers,
-                    "departure_time": departure_time,
-                    "arrival_time": arrival_time,
                 }
+
     processed_deals = list(best_deals.values())
             
     return processed_deals

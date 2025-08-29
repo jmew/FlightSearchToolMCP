@@ -4,24 +4,7 @@ from fastmcp.tools import Tool
 from scrapers import seats_aero, pointsyeah
 import json
 from typing import List, Optional
-from fast_flights import get_flights, FlightData, Passengers
-
-PROGRAM_MAPPING = {
-    "Virgin": "Virgin Atlantic",
-    "Virgin Atlantic Flying Club": "Virgin Atlantic",
-    "Delta SkyMiles": "Delta",
-    "Delta": "Delta",
-    "American Airlines AAdvantage": "American Airlines",
-    "Alaska Atmos Rewards": "Alaska Airlines",
-    "Qantas Frequent Flyer": "Qantas",
-    "Qantas": "Qantas",
-}
-
-def normalize_program_name(program_name: Optional[str]) -> Optional[str]:
-    """Normalizes airline program names for consistent matching."""
-    if not program_name:
-        return None
-    return PROGRAM_MAPPING.get(program_name, program_name)
+from cash_price import get_flight_cash_prices, normalize_program_name
 
 class FlightSearchMCP(FastMCP):
     def __init__(self):
@@ -31,74 +14,6 @@ class FlightSearchMCP(FastMCP):
             description="Finds the best flight deals using points from various sources.",
         )
         self.add_tool(tool)
-
-    async def get_flight_cash_prices(self, deal: dict, cabin: str) -> None:
-        """Gets cash prices for a given deal and cabin, and calculates CPP."""
-        if not deal.get(cabin) or not deal[cabin].get('points'):
-            return
-
-        try:
-            origin, destination = deal['route'].split(' -> ')
-            flight_data = [
-                FlightData(date=deal['date'], from_airport=origin, to_airport=destination)
-            ]
-            passengers = Passengers(adults=1)
-
-            seat_map = {
-                'economy': 'economy',
-                'premium': 'premium-economy',
-                'business': 'business',
-                'first': 'first'
-            }
-            seat_type = seat_map.get(cabin)
-            if not seat_type:
-                return
-
-            cash_result = get_flights(
-                flight_data=flight_data,
-                trip="one-way",
-                passengers=passengers,
-                seat=seat_type,
-                fetch_mode="fallback",
-            )
-
-            if cash_result and cash_result.flights:
-                # Cheapest cash price is the first result
-                cheapest_flight = cash_result.flights[0]
-                cheapest_price_str = cheapest_flight.price.replace('$', '').replace(',', '')
-                cheapest_price = float(cheapest_price_str)
-                points = deal[cabin]['points']
-                cheapest_cpp = (cheapest_price / points) * 100 if points > 0 else 0
-                deal[cabin]['cheapest_cash_price'] = cheapest_price
-                deal[cabin]['cheapest_cpp'] = round(cheapest_cpp, 2)
-
-                # Find exact match
-                exact_match_flight = None
-                award_flight_numbers = deal[cabin].get('flight_numbers')
-                award_departure_time = deal[cabin].get('departure_time')
-
-                for flight in cash_result.flights:
-                    # Attempt to match by flight number if available
-                    if award_flight_numbers and flight.name in " ".join(award_flight_numbers):
-                        exact_match_flight = flight
-                        break
-                    # Fallback to matching by departure time
-                    elif award_departure_time and flight.departure and award_departure_time in flight.departure:
-                        exact_match_flight = flight
-                        break
-                
-                if exact_match_flight:
-                    exact_price_str = exact_match_flight.price.replace('$', '').replace(',', '')
-                    exact_price = float(exact_price_str)
-                    exact_cpp = (exact_price / points) * 100 if points > 0 else 0
-                    deal[cabin]['exact_cash_price'] = exact_price
-                    deal[cabin]['exact_cpp'] = round(exact_cpp, 2)
-                else:
-                    deal[cabin]['exact_cash_price'] = 'N/A'
-                    deal[cabin]['exact_cpp'] = 'N/A'
-
-        except Exception as e:
-            print(f"Error getting cash price for {deal['route']} ({cabin}): {e}")
 
     async def check_flight_points_prices(
         self,
@@ -215,7 +130,7 @@ class FlightSearchMCP(FastMCP):
         cash_price_tasks = []
         for deal in unique_deals:
             for cabin in ['economy', 'premium', 'business', 'first']:
-                cash_price_tasks.append(self.get_flight_cash_prices(deal, cabin))
+                cash_price_tasks.append(get_flight_cash_prices(deal, cabin))
         
         await asyncio.gather(*cash_price_tasks)
 

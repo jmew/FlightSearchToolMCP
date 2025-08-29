@@ -5,7 +5,7 @@
       "args": [
         "the_point_finder/mcp_server.py"
       ],
-      "timeout": 120000,
+      "timeout": 160000,
       "trust": true
     }
   }

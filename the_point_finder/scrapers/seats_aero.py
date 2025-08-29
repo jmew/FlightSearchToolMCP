@@ -1,11 +1,9 @@
-from playwright.sync_api import sync_playwright
-from bs4 import BeautifulSoup
-import re
-import time
+import json
+from primp import Client
 
 def scrape_seats_aero(origin, destination, start_date, end_date, programs=None, alliances=None, transfer_partners=None, points_min=None, points_max=None, days=None):
     """
-    Scrapes seats.aero for flight deals.
+    Scrapes seats.aero for flight deals using their internal API.
 
     Args:
         origin (str): The origin airport IATA code.
@@ -14,7 +12,7 @@ def scrape_seats_aero(origin, destination, start_date, end_date, programs=None, 
         end_date (str): The end date for the travel date range in YYYY-MM-DD format.
         programs (list, optional): List of frequent flyer programs to filter by. Defaults to None.
         alliances (list, optional): List of airline alliances to filter by. Defaults to None.
-        transfer_partners (list, optional): List of transfer partners to filter by. Defaults to ['American Express 🇺🇸', 'Capital One', 'Chase'].
+        transfer_partners (list, optional): List of transfer partners to filter by. Defaults to None.
         points_min (int, optional): Minimum points required for a deal. Defaults to None.
         points_max (int, optional): Maximum points required for a deal. Defaults to None.
         days (int, optional): Number of days to search around the specified date. Defaults to None.
@@ -22,156 +20,84 @@ def scrape_seats_aero(origin, destination, start_date, end_date, programs=None, 
     Returns:
         list: A list of flight options, where each option is a dictionary.
     """
-    if transfer_partners is None:
-        transfer_partners = ['American Express 🇺🇸', 'Capital One', 'Chase']
-    url = f"https://seats.aero/search?min_seats=1&applicable_cabin=any&max_fees=40000&disable_live_filtering=false&date={start_date}&origins={origin}&destinations={destination}"
+    search_url = f"https://seats.aero/_api/search_partial?min_seats=1&applicable_cabin=any&max_fees=40000&disable_live_filtering=false&date={start_date}&origins={origin}&destinations={destination}"
     if days and days > 0:
-        url += f"&additional_days_num={days}"
+        search_url += f"&additional_days_num={days}"
 
-    print(f"Scraping {url}")
-    
-    with sync_playwright() as p:
-        browser = p.chromium.launch(headless=True)
-        context = browser.new_context(
-            user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36"
-        )
-        page = context.new_page()
-        page.set_viewport_size({"width": 1920, "height": 1080})
-        
+    print(f"Scraping {search_url}")
+    client = Client(impersonate="safari_17.2.1")
+    try:
+        search_response = client.get(search_url)
+        if search_response.status_code != 200:
+            raise Exception(f"Failed to fetch search results: {search_response.status_code}")
+        search_data = json.loads(search_response.text)
+    except Exception as e:
+        print(f"Error fetching search results from seats.aero: {e}")
+        return []
+
+    all_deals = []
+    if not search_data.get('metadata'):
+        return []
+
+    for item in search_data['metadata']:
+        enrichment_url = f"https://seats.aero/_api/enrichment_modern/{item['id']}?m=1&min_seats=1&applicable_cabin=any&additional_days_num=1&max_fees=40000&disable_live_filtering=false&date={start_date}&origins={origin}&destinations={destination}"
         try:
-            page.goto(url, timeout=60000)
-            print("Page loaded.")
-            
-            # Apply filters via UI interaction
-            if programs:
-                page.click('button:has-text("Programs")')
-                page.wait_for_selector('.custom-dropdown-menu')
-                for program in programs:
-                    page.check(f'label:has-text("{program}")')
-                    time.sleep(0.5) # Wait for live update
-                page.click('button:has-text("Programs")') # Close dropdown
-            
-            if alliances:
-                page.click('button:has-text("Alliances")')
-                page.wait_for_selector('.custom-dropdown-menu')
-                for alliance in alliances:
-                    page.check(f'label:has-text("{alliance}")')
-                    time.sleep(0.5)
-                page.click('button:has-text("Alliances")')
-
-            if transfer_partners:
-                page.click('button:has-text("Transfer Partners")')
-                page.wait_for_selector('.custom-dropdown-menu')
-                for partner in transfer_partners:
-                    page.check(f'label:has-text("{partner}")')
-                    time.sleep(0.5)
-                page.click('button:has-text("Transfer Partners")') # Close dropdown
-
-            if points_min or points_max:
-                page.click('button:has-text("Points")')
-                if points_min:
-                    page.fill('input[placeholder="Min"]', str(points_min))
-                if points_max:
-                    page.fill('input[placeholder="Max"]', str(points_max))
-                page.click('button:has-text("Points")')
-
-            # Check for the "no results" message
-            if page.locator("text=our cached data does not track any flights between them").is_visible():
-                print("No cached data available for this route.")
-                return []
-
-            print("Waiting for results...")
-            page.wait_for_selector('table.dataTable tbody tr', timeout=10000) # Reduced timeout
-            print("Results found.")
-            
-            html = page.content()
+            enrichment_response = client.get(enrichment_url)
+            if enrichment_response.status_code != 200:
+                raise Exception(f"Failed to fetch enrichment data: {enrichment_response.status_code}")
+            enrichment_data = json.loads(enrichment_response.text)
         except Exception as e:
-            print(f"An error occurred: {e}")
-            page.screenshot(path="error.png")
-            print("Screenshot saved to error.png")
-            html = ""
-        finally:
-            browser.close()
+            print(f"Error fetching enrichment data from seats.aero for id {item['id']}: {e}")
+            continue
 
-    if not html:
-        return []
+        if not enrichment_data.get('trips'):
+            continue
 
-    soup = BeautifulSoup(html, 'lxml')
-    results_table = soup.find('table', class_='dataTable')
-    
-    if not results_table:
-        print("No results table found.")
-        return []
+        for trip in enrichment_data['trips']:
+            deal = {
+                "date": item['date'],
+                "program": enrichment_data['source'],
+                "route": f"{trip['OriginAirport']} -> {trip['DestinationAirport']}",
+                "flight_numbers": [trip['FlightNumbers']],
+                "departure_time": trip['DepartsAt'],
+                "arrival_time": trip['ArrivesAt'],
+                "economy": None,
+                "premium": None,
+                "business": None,
+                "first": None,
+            }
 
-    deals = []
-    for row in results_table.find('tbody').find_all('tr'):
-        cols = row.find_all('td')
-        
-        date = cols[0].text.strip()
-        last_seen = cols[1].text.strip()
-        program = cols[2].text.strip()
-        departs_str = cols[3].text.strip()
-        arrives_str = cols[4].text.strip()
+            cabin = trip['Cabin'].lower()
+            if "premium" in cabin:
+                cabin_key = "premium"
+            elif "business" in cabin:
+                cabin_key = "business"
+            elif "first" in cabin:
+                cabin_key = "first"
+            else:
+                cabin_key = "economy"
 
-        # Extract airport and time
-        departs_parts = departs_str.split()
-        arrives_parts = arrives_str.split()
-        
-        departs_airport = departs_parts[0]
-        departs_time = departs_parts[1] if len(departs_parts) > 1 else None
+            deal[cabin_key] = {
+                "points": trip['MileageCost'],
+                "fees": f"{trip['TaxesCurrencySymbol']}{trip['TotalTaxes']/100} {trip['TaxesCurrency']}",
+                "seats": trip['RemainingSeats'],
+                "direct": trip['Stops'] == 0,
+            }
+            all_deals.append(deal)
 
-        arrives_airport = arrives_parts[0]
-        arrives_time = arrives_parts[1] if len(arrives_parts) > 1 else None
-
-        def get_cabin_data(col):
-            badge = col.find('span', class_='badge')
-            if badge and "Not Available" not in badge.text:
-                tooltip = badge.get('data-bs-original-title', '')
-                points_match = re.search(r'(\d{1,3}(,\d{3})*)\s*pts', tooltip)
-                fees_match = re.search(r'\+\s*([€$]\d+\.\d{2}\s*[A-Z]{3})', tooltip)
-                seats_match = re.search(r'(\d+)\s*seats', tooltip)
-                direct_match = "Direct" in tooltip
-                
-                return {
-                    "points": int(points_match.group(1).replace(',', '')) if points_match else None,
-                    "fees": fees_match.group(1) if fees_match else None,
-                    "seats": int(seats_match.group(1)) if seats_match else None,
-                    "direct": direct_match
-                }
-            return None
-
-        economy = get_cabin_data(cols[5])
-        premium = get_cabin_data(cols[6])
-        business = get_cabin_data(cols[7])
-        first = get_cabin_data(cols[8])
-
-        deals.append({
-            "date": date,
-            "last_seen": last_seen,
-            "program": program,
-            "route": f"{departs_airport} -> {arrives_airport}",
-            "departure_time": departs_time,
-            "arrival_time": arrives_time,
-            "flight_numbers": [],
-            "economy": economy,
-            "premium": premium,
-            "business": business,
-            "first": first,
-        })
-
-    return deals
+    return all_deals
 
 if __name__ == '__main__':
     # Example usage for testing
-    origin = "JFK"
-    destination = "LHR"
-    start_date = "2025-09-01"
-    end_date = "2025-09-10"
+    origin = "SEA"
+    destination = "SJC"
+    start_date = "2025-10-10"
+    end_date = "2025-10-10"
     
-    deals = scrape_seats_aero(origin, destination, start_date, end_date, days=3)
+    deals = scrape_seats_aero(origin, destination, start_date, end_date)
     
     if deals:
         for deal in deals:
-            print(deal)
+            print(json.dumps(deal, indent=2))
     else:
         print("No deals found.")
