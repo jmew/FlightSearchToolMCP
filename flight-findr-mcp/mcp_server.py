@@ -1,4 +1,5 @@
 import asyncio
+import argparse
 from fastmcp import FastMCP
 from fastmcp.tools import Tool
 from scrapers import seats_aero, pointsyeah
@@ -11,7 +12,7 @@ class FlightSearchMCP(FastMCP):
         super().__init__()
         tool = Tool.from_function(
             self.check_flight_points_prices,
-            description="Finds the best flight deals using points from various sources.",
+            description="Finds the best flight deals using points and cashfrom various sources.",
         )
         self.add_tool(tool)
 
@@ -153,8 +154,20 @@ class FlightSearchMCP(FastMCP):
 
 mcp_server = FlightSearchMCP()
 
-def run():
-    mcp_server.run(transport="stdio")
+def main():
+    parser = argparse.ArgumentParser(description="Run the Flight Search MCP server.")
+    parser.add_argument(
+        "--transport",
+        choices=["stdio", "http"],
+        default="stdio",
+        help="The transport protocol to use.",
+    )
+    args = parser.parse_args()
+
+    if args.transport == "stdio":
+        mcp_server.run(transport="stdio")
+    elif args.transport == "http":
+        mcp_server.run(transport="http", host="localhost", port=9999)
 
 if __name__ == "__main__":
-    run()
+    main()

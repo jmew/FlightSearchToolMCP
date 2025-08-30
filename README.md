@@ -1,130 +1,47 @@
-# The Point Finder
+# Flight Findr
 
-**The Point Finder** is a powerful flight deal scraper that finds the best award travel options using points. It scrapes popular services like `seats.aero` and `pointsyeah` and exposes the results through a simple and efficient MCP (Machine-Readable Command Post) server.
-
-This tool is perfect for travel enthusiasts and developers who want to automate their search for the best flight deals.
+Flight Findr is a powerful, AI-powered application that helps you find the best flight deals using your credit card points and airline miles. It scrapes data from popular award travel websites and provides a user-friendly chat interface to interact with the results.
 
 ## Features
 
-- **Multi-Source Scraping**: Gathers flight deals from both `seats.aero` and `pointsyeah`.
-- **MCP Server**: Exposes a simple API endpoint to check for flight point prices.
-- **Best Deal Identification**: Automatically identifies and highlights the cheapest deal found.
-- **Easy to Install**: Packaged for simple local installation via `pip`.
+- **AI-Powered Chat:** A natural language interface to search for award flights.
+- **Multi-Source Scraping:** Gathers data from "seats.aero" and "pointsyeah" for comprehensive results.
+- **Cash Price Enrichment:** Calculates the cents-per-point (CPP) value to help you determine the best deals.
+- **Dockerized:** Easy to set up and run with Docker.
 
-## Installation
-
-Follow these steps to set up The Point Finder on your local machine.
+## Getting Started
 
 ### Prerequisites
 
-- Python 3.8 or higher
-- `git` for cloning the repository
+- Docker
+- Node.js
+- Python 3.11
+- An environment file `.env` with your Gemini API Key `GEMINI_API_KEY=your_api_key`
 
-### 1. Clone the Repository
+### Installation
 
-```bash
-git clone <repository-url>
-cd flight-search-mcp
-```
-
-### 2. Set Up a Virtual Environment
-
-It is highly recommended to use a virtual environment to manage dependencies.
-
-```bash
-python3 -m venv venv
-source venv/bin/activate
-```
-
-### 3. Install the Package
-
-Install the tool and all its dependencies with a single command:
-
-```bash
-pip install .
-```
-
-### 4. Install Playwright Browsers
-
-The Point Finder uses Playwright for web scraping, which requires browser binaries to be installed.
-
-```bash
-playwright install
-```
+1. **Clone the repository:**
+   ```bash
+   git clone https://your-repository-url.git
+   cd flight-findr
+   ```
+2. **Build and run the application with Docker Compose:**
+   ```bash
+   docker-compose up --build
+   ```
+The application will be available at `http://localhost:3000`.
 
 ## Usage
 
-Once installed, you can run the MCP server with the following command:
+Once the application is running, you can open your web browser and navigate to `http://localhost:3000`. You will be greeted with a chat interface where you can ask the AI to find flight deals.
 
-```bash
-the-point-finder-server
-```
+For example, you can ask:
+"Find me a flight from SFO to LAX between 2025-12-01 and 2025-12-10"
 
-The server will start on `http://0.0.0.0:8080`.
+## Project Structure
 
-## API Reference
-
-The MCP server provides one primary tool: `check_flight_points_prices`.
-
-### `check_flight_points_prices`
-
-This tool searches for the best flight deals using points from various sources.
-
-#### Request
-
-You can send a POST request to the `/tools/check_flight_points_prices/call` endpoint. Here is an example using `curl`:
-
-```bash
-curl -X POST http://localhost:8080/tools/check_flight_points_prices/call \
--H "Content-Type: application/json" \
--d '{
-    "origin_airports": ["SFO", "JFK"],
-    "destination_airports": ["LAX", "LHR"],
-    "start_date": "2025-10-01",
-    "end_date": "2025-10-05"
-}'
-```
-
-#### Parameters
-
-- `origin_airports` (required, List[str]): A list of one or more origin airport IATA codes.
-- `destination_airports` (required, List[str]): A list of one or more destination airport IATA codes.
-- `start_date` (required, str): The start date for the search in `YYYY-MM-DD` format.
-- `end_date` (required, str): The end date for the search in `YYYY-MM-DD` format.
-- `programs` (optional, List[str]): A list of frequent flyer programs to filter by.
-- `alliances` (optional, List[str]): A list of airline alliances to filter by.
-- `transfer_partners` (optional, List[str]): A list of transfer partners to filter by.
-- `points_min` (optional, int): The minimum number of points for a deal.
-- `points_max` (optional, int): The maximum number of points for a deal.
-- `days` (optional, int): The number of days to search around the specified date.
-
-#### Response
-
-The tool returns a JSON object containing all the deals found and the cheapest deal.
-
-```json
-{
-  "all_deals": [
-    {
-      "date": "2025-10-02",
-      "program": "United MileagePlus",
-      "route": "SFO -> LAX",
-      "economy": {
-        "points": 5000,
-        "fees": "$5.60 USD"
-      },
-      "source": "seats.aero"
-    }
-  ],
-  "cheapest_deal": {
-    "date": "2025-10-02",
-    "program": "United MileagePlus",
-    "route": "SFO -> LAX",
-    "economy": {
-      "points": 5000,
-      "fees": "$5.60 USD"
-    },
-    "source": "seats.aero"
-  }
-}
-```
+- **`flight-findr-mcp`:** A Python-based microservice responsible for scraping flight data from various sources.
+- **`web-frontend`:** A React application that provides the user interface.
+- **`web-server`:** A Node.js server that handles the backend logic, including the Gemini integration.
+- **`Dockerfile`:** A multi-stage Dockerfile for building the production image.
+- **`docker-compose.yml`:** A Docker Compose file for orchestrating the services.
