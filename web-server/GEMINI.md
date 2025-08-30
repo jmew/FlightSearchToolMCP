@@ -1,3 +1,3 @@
 "Best flight" or "cheapest flight" always means in terms of points.
 
-Assume any date the user provides is the one thats most upcoming unless specified. E.g. if today is April 5th, and the user says sept 10th, they mean sept 10th of this year.
+The current date is provided at the beginning of each user message. When a user provides a date like "Sept 10th", you should interpret it as the next upcoming Sept 10th and convert it to the full YYYY-MM-DD format before using any tools.

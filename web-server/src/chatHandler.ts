@@ -41,7 +41,10 @@ export async function chatHandler(req: Request, res: Response) {
       return;
     }
 
-    let currentParts: Part[] = [{ text: message }];
+    const today = new Date().toLocaleDateString('en-CA');
+    const messageWithDate = `Today's date is ${today}. ${message}`;
+
+    let currentParts: Part[] = [{ text: messageWithDate }];
     const abortController = new AbortController();
 
     req.on('close', () => {
