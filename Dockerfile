@@ -9,7 +9,7 @@ RUN npm run build
 # Python setup stage
 FROM python:3.11-slim
 WORKDIR /app
-COPY the_point_finder/. .
+COPY flight-findr-mcp/. .
 RUN pip install --no-cache-dir -r requirements.txt
 
 # Final stage
@@ -20,7 +20,7 @@ COPY --from=builder /app/node_modules ./node_modules
 COPY --from=builder /app/package.json .
 COPY --from=0 /usr/local/bin/ /usr/local/bin/
 COPY --from=0 /usr/local/lib/python3.11 /usr/local/lib/python3.11
-COPY the_point_finder/. .
+COPY flight-findr-mcp/. .
 
 ENV GEMINI_API_KEY=$GEMINI_API_KEY
 EXPOSE 8080
