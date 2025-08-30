@@ -1,7 +1,6 @@
 import argparse
 from scrapers import seats_aero, pointsyeah
 import sys
-import json
 import asyncio
 from cash_price import get_flight_cash_prices, normalize_program_name, parse_time
 
